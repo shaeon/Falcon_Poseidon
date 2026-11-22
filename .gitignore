@@ -1,0 +1,10 @@
+poseidon/db/
+poseidon/incremental_db/
+poseidon/output_files/
+poseidon/greybox_tmp/
+poseidon/build_id.v
+poseidon/*.qws
+poseidon/*.rpt
+poseidon/*.summary
+poseidon/*.smsg
+poseidon/rtl/

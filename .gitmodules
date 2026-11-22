@@ -1,0 +1,7 @@
+[submodule "Falcon_MiSTer"]
+	path = Falcon_MiSTer
+	url = https://github.com/apolkosnik/Falcon_MiSTer.git
+	branch = ap030
+[submodule "common/mist-modules"]
+	path = common/mist-modules
+	url = https://github.com/teiram/mist-modules.git
