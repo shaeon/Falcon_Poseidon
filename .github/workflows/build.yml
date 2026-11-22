@@ -17,11 +17,13 @@ on:
     paths-ignore:
       - '**.md'
       - 'tb/**'
+      - 'releases/**'
   pull_request:
     branches: [main]
     paths-ignore:
       - '**.md'
       - 'tb/**'
+      - 'releases/**'
   workflow_dispatch:
 
 permissions:
