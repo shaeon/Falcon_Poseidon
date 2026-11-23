@@ -1,19 +1,26 @@
-// PLL principal del Falcon030 para Poseidon (50 MHz de entrada):
-//   c0  32 MHz: clk_sys (CPU, chipset, DSP, user_io, video)
-//   c1  96 MHz: clk_mem, controlador de la SDRAM; SDRAM_CLK es c1 invertido
-//   c2  96 MHz retrasado 7200 ps: clk_rd, coge en el pin el dato leido
+// PLL principal del Falcon030 para Poseidon (50 MHz de entrada, N=4, M=123,
+// VCO 1537,5 MHz; 32/96 MHz exactos no salen con un PFD de 5 MHz o mas, y
+// Quartus ya elegia este VCO):
+//   c0  VCO/48 = 32,03 MHz: clk_sys (CPU, chipset, DSP, user_io, video)
+//   c1  VCO/16 = 96,09 MHz: clk_mem, controlador de la SDRAM; SDRAM_CLK es
+//       c1 invertido
+//   c2  VCO/16 retrasado 7236 ps (250 grados, lo mas cerca de 7200 que da el VCO): clk_rd, coge en el pin el dato leido
+//   c3  reloj de pixel VGA (VCO/61 = 25,205 MHz): relacion exacta 48/61 con c0,
+//       la misma que usa el acumulador del Videl (common/build_id.tcl)
 `timescale 1 ps / 1 ps
 module pll (
 	inclk0,
 	c0,
 	c1,
 	c2,
+	c3,
 	locked);
 
 	input	  inclk0;
 	output	  c0;
 	output	  c1;
 	output	  c2;
+	output	  c3;
 	output	  locked;
 
 	wire [4:0] sub_wire0;
@@ -24,6 +31,7 @@ module pll (
 	wire  c0 = sub_wire1;
 	wire  c1 = sub_wire2;
 	wire  c2 = sub_wire0[2];
+	wire  c3 = sub_wire0[3];
 	wire  locked = sub_wire3;
 	wire  sub_wire4 = inclk0;
 	wire [1:0] sub_wire5 = {sub_wire6, sub_wire4};
@@ -68,19 +76,23 @@ module pll (
 				.vcounderrange ());
 	defparam
 		altpll_component.bandwidth_type = "AUTO",
-		altpll_component.clk0_divide_by = 25,
+		altpll_component.clk0_divide_by = 64,
 		altpll_component.clk0_duty_cycle = 50,
-		altpll_component.clk0_multiply_by = 16,
+		altpll_component.clk0_multiply_by = 41,
 		altpll_component.clk0_phase_shift = "0",
-		altpll_component.clk1_divide_by = 25,
+		altpll_component.clk1_divide_by = 64,
 		altpll_component.clk1_duty_cycle = 50,
-		altpll_component.clk1_multiply_by = 48,
+		altpll_component.clk1_multiply_by = 123,
 		altpll_component.clk1_phase_shift = "0",
-		altpll_component.clk2_divide_by = 25,
+		altpll_component.clk2_divide_by = 64,
 		altpll_component.clk2_duty_cycle = 50,
-		altpll_component.clk2_multiply_by = 48,
-		altpll_component.clk2_phase_shift = "7200",
+		altpll_component.clk2_multiply_by = 123,
+		altpll_component.clk2_phase_shift = "7236",
 		altpll_component.compensate_clock = "CLK0",
+		altpll_component.clk3_divide_by = 244,
+		altpll_component.clk3_duty_cycle = 50,
+		altpll_component.clk3_multiply_by = 123,
+		altpll_component.clk3_phase_shift = "0",
 		altpll_component.inclk0_input_frequency = 20000,
 		altpll_component.intended_device_family = "Cyclone IV GX",
 		altpll_component.lpm_hint = "CBX_MODULE_PREFIX=pll",
@@ -115,7 +127,7 @@ module pll (
 		altpll_component.port_clk0 = "PORT_USED",
 		altpll_component.port_clk1 = "PORT_USED",
 		altpll_component.port_clk2 = "PORT_USED",
-		altpll_component.port_clk3 = "PORT_UNUSED",
+		altpll_component.port_clk3 = "PORT_USED",
 		altpll_component.port_clk4 = "PORT_UNUSED",
 		altpll_component.port_clk5 = "PORT_UNUSED",
 		altpll_component.port_clkena0 = "PORT_UNUSED",

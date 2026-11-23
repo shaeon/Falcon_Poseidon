@@ -8,9 +8,9 @@ reg reset = 1;
 
 reg  [31:0] c_lba [7]; reg [6:0] c_rd = 0, c_wr = 0; reg [5:0] c_blk_cnt [7];
 wire [6:0] c_ack; wire [13:0] c_buff_addr; wire [7:0] c_buff_dout; wire c_buff_wr;
-reg  [7:0] c_buff_din [7]; wire [6:0] c_img_mounted;
+reg  [7:0] c_buff_din [7]; wire [6:0] c_img_mounted; wire [63:0] c_img_size;
 wire [31:0] m_lba; wire [3:0] m_rd, m_wr; reg m_ack = 0; reg [8:0] m_buff_addr = 0;
-reg [7:0] m_dout = 0; reg m_dout_strobe = 0; wire [7:0] m_din; reg [3:0] m_img_mounted = 0;
+reg [7:0] m_dout = 0; reg m_dout_strobe = 0; wire [7:0] m_din; reg [3:0] m_img_mounted = 0; reg [63:0] m_img_size = 0;
 
 falcon_sd_bridge dut (.*);
 
@@ -81,6 +81,39 @@ initial begin
 	nlog = 0; nwr = 0;
 	req(3'd1, 32'd33, 6'd0, 0);
 	if (nlog != 1 || log_lba[0] != 33 || nwr != 512) begin $display("ERROR floppy B"); errors = errors + 1; end
+	// CD: imagen de 650 MB en la ranura 1 -> expulsa B (tamano 0) y monta ID 2
+	begin : cd
+		integer seen1, seen6; reg [63:0] sz1, sz6;
+		seen1 = 0; seen6 = 0;
+		@(posedge clk); m_img_size <= 64'd681574400; m_img_mounted <= 4'b0010;
+		@(posedge clk); m_img_mounted <= 0;
+		repeat (8) begin
+			@(posedge clk);
+			if (c_img_mounted[1]) begin seen1 = 1; sz1 = c_img_size; end
+			if (c_img_mounted[6]) begin seen6 = 1; sz6 = c_img_size; end
+		end
+		if (!seen1 || sz1 != 0 || !seen6 || sz6 != 64'd681574400) begin $display("ERROR montaje del CD %0d %0d %0d %0d", seen1, sz1, seen6, sz6); errors = errors + 1; end
+		repeat (200) @(posedge clk);   // MSF del lead-out
+		// READ TOC (unidad 2, LBA): pista 1 en 0 y lead-out en 332800
+		nlog = 0; nwr = 0;
+		req(3'd6, 32'h7E204300, 6'd0, 0);
+		if (nlog != 0 || nwr != 512) begin $display("ERROR TOC: %0d %0d", nlog, nwr); errors = errors + 1; end
+		if (cmem[1] != 8'd18 || cmem[2] != 1 || cmem[5] != 8'h14 || cmem[6] != 1 || cmem[14] != 8'hAA ||
+		    {cmem[16], cmem[17], cmem[18], cmem[19]} != 32'd332800 || cmem[511] != 20) begin
+			$display("ERROR TOC: %h %h %h ... %h %h%h%h%h len %0d", cmem[1], cmem[5], cmem[6], cmem[14], cmem[16], cmem[17], cmem[18], cmem[19], cmem[511]);
+			errors = errors + 1;
+		end
+		// en MSF: 332800 + 150 = 332950 -> 73:59:25
+		req(3'd6, 32'h7E214300, 6'd0, 0);
+		if ({cmem[17], cmem[18], cmem[19]} != {8'd73, 8'd59, 8'd25}) begin $display("ERROR MSF %0d:%0d:%0d", cmem[17], cmem[18], cmem[19]); errors = errors + 1; end
+		// MODE SENSE(6) del disco SCSI 0: bloques de 512
+		req(3'd4, 32'h7E001A00, 6'd0, 0);
+		if (cmem[0] != 11 || cmem[3] != 8 || {cmem[9], cmem[10], cmem[11]} != 24'd512 || cmem[511] != 12) begin $display("ERROR MODE SENSE"); errors = errors + 1; end
+		// lectura de datos del CD: va a la imagen 1 de MiST
+		nlog = 0;
+		req(3'd6, 32'd4000, 6'd3, 0);
+		if (nlog != 4 || log_lba[0] != 4000 || log_lba[3] != 4003) begin $display("ERROR lectura del CD"); errors = errors + 1; end
+	end
 	$display("FIN: %0d errores", errors);
 	$finish;
 end

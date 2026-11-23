@@ -9,11 +9,13 @@
 //
 // Todas las salidas del Videl (color, sincronismos, blanking) cambian solo
 // con ce_pix, asi que se escriben en una FIFO con ce_pix y se leen con un
-// reloj de pixel de verdad (clk_pix, 25,1736 MHz = 50 x 145 / 288, 55 ppm por
-// debajo de 25,175). La diferencia (unos 23 pixeles por cuadro) se corrige
-// saltandose o repitiendo un pixel de borrado horizontal cuando la ocupacion
-// de la FIFO se sale de su margen: un punto (40 ns) cada ~23 lineas, siempre
-// fuera de la imagen.
+// reloj de pixel de verdad: clk_pix = clk_sys x 48/61 (25,205 MHz, salida c3
+// del mismo PLL), la misma relacion que usa el acumulador del Videl, que en
+// la Poseidon se parchea a 48/61 (common/build_id.tcl). La FIFO no deriva:
+// todas las lineas salen con la misma duracion, sin saltar ni repetir puntos (como el FP-1100 y el
+// NewBrain, con relojes de relacion exacta). Solo se recoloca el puntero de
+// lectura al arrancar o al cambiar de modo, cuando la ocupacion se sale de
+// margen.
 //
 // Clase del modo, medida en cada linea (ciclos de 32 MHz por pixel):
 //   1,00 / 2,00 / 4,00 -> base de 32 MHz (RGB, TV, mono): camino directo
@@ -31,7 +33,7 @@ module falcon_vga_resync (
 	input  wire       hs_in, vs_in, hb_in, vb_in,
 	output reg        use25 = 1'b0, // (clk) la imagen debe salir por clk_pix
 
-	input  wire       clk_pix,      // 25,1736 MHz
+	input  wire       clk_pix,      // 25,205 MHz, 48/61 de clk
 	output reg  [5:0] r, g, b,
 	output reg        hs, vs, hb, vb
 );
@@ -116,10 +118,8 @@ localparam [7:0] TARGET = 8'd96;
 reg  [7:0] rptr = 8'd0;
 reg  [1:0] rdiv = 2'd0;
 reg [21:0] q;
-reg        fixed_line = 1'b0;     // ya se ha corregido en esta linea
 wire [7:0] wbin = gray2bin(wg2);
 wire [7:0] occ  = wbin - rptr;
-wire       q_hb = q[21];
 
 wire       rd_ce = (rdiv == ((2'd1 << div2) - 2'd1)) || (div2 == 2'd0);
 
@@ -129,16 +129,8 @@ always @(posedge clk_pix) begin
 
 	if (rd_ce) begin
 		{hb, vb, hs, vs, r, g, b} <= q;
-		if (!q_hb) fixed_line <= 1'b0;
-
 		if (occ < 8'd16 || occ > 8'd240)
 			rptr <= wbin - TARGET;                    // arranque o cambio de modo
-		else if (q_hb && !fixed_line && occ > TARGET + 8'd8) begin
-			rptr <= rptr + 8'd2;                       // se salta un punto de borrado
-			fixed_line <= 1'b1;
-		end
-		else if (q_hb && !fixed_line && occ < TARGET - 8'd8)
-			fixed_line <= 1'b1;                        // repite uno
 		else
 			rptr <= rptr + 8'd1;
 	end

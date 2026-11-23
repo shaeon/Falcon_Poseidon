@@ -1,9 +1,10 @@
 # Atari Falcon030 para Poseidon - restricciones de tiempos
 #
 # PLL principal (50 MHz):
-#   clk[0]  32 MHz  clk_sys: CPU, chipset, DSP, user_io, video
-#   clk[1]  96 MHz  clk_mem: controlador de la SDRAM
-#   clk[2]  96 MHz  clk_rd: retrasado 7,2 ns, coge el dato leido en el pin
+#   clk[0]  32,03 MHz  clk_sys: CPU, chipset, DSP, user_io, video
+#   clk[1]  96,09 MHz  clk_mem: controlador de la SDRAM
+#   clk[2]  96,09 MHz  clk_rd: retrasado 7,2 ns, coge el dato leido en el pin
+#   clk[3]  25,205 MHz clk_pix: pixel VGA, 48/61 de clk_sys
 # SDRAM_CLK es clk_mem invertido (registro DDR del pin).
 # Los tres salen del mismo PLL y en fase entera (96 = 3 x 32), asi que los
 # cruces clk_sys <-> clk_mem se analizan como sincronos (10,4 ns).
@@ -16,9 +17,9 @@ derive_pll_clocks -create_base_clocks
 set clk_sys {pll|altpll_component|auto_generated|pll1|clk[0]}
 set clk_mem {pll|altpll_component|auto_generated|pll1|clk[1]}
 set clk_rd  {pll|altpll_component|auto_generated|pll1|clk[2]}
-# segundo PLL: reloj de pixel de los modos VGA (25,1736 MHz), sin relacion
-# con los demas (falcon_vga_resync cruza con una FIFO de doble reloj y Gray)
-set clk_pix {pll_vga|altpll_component|auto_generated|pll1|clk[0]}
+# Reloj de pixel VGA: aunque sale del mismo VCO, se trata como asincrono
+# (falcon_vga_resync cruza con una FIFO de doble reloj y Gray)
+set clk_pix {pll|altpll_component|auto_generated|pll1|clk[3]}
 
 # El reloj que ve la SDRAM, en la pata: clk_mem invertido (incluye el
 # retardo del registro DDR)

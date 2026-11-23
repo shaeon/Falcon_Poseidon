@@ -6,10 +6,11 @@
 // y al framework sys/ de MiSTer.
 //
 //   - Memoria: la DDR3 de MiSTer pasa a la SDRAM (falcon_sdram).
-//   - Discos: 4 imagenes (Floppy A, Floppy B, IDE master, SCSI 0) por
-//     falcon_sd_bridge.
-//   - Sin FPU (FALCON_NO_FPU), sin persistencia de NVRAM y sin CD-ROM: en
-//     MiSTer los tres dependen del ARM o del Main modificado.
+//   - Discos: 4 imagenes (Floppy A, Floppy B o CD-ROM, IDE master, SCSI 0)
+//     por falcon_sd_bridge.
+//   - FPU 68882 en la FPGA (rtl/fpu): falcon_fpu_mbox atiende el buzon del
+//     puente del core, que en MiSTer atiende un programa del ARM.
+//   - Sin persistencia de NVRAM (en MiSTer depende del Main modificado).
 //
 // Port de Shaeon (Carlos Palmero).
 //============================================================================
@@ -59,13 +60,14 @@ localparam bit BIG_OSD = 0;
 `endif
 
 // Indices de data_io: 0 = FALCON.ROM, que el firmware carga solo al
-// arrancar; 1 = "Load TOS"; 2 = cartucho. Imagenes: S0..S3.
+// arrancar; 1 = "Load TOS"; 2 = cartucho. Imagenes: S0..S3; en S1 va el
+// disquete B (.ST) o el CD-ROM (.ISO), segun el tamano (falcon_sd_bridge).
 localparam CONF_STR = {
 	"FALCON;;",
 	"F,IMGROM,Load TOS;",
 	"F,STCIMGROM,Load Cartridge;",
 	"S0U,ST ,Floppy A:;",
-	"S1U,ST ,Floppy B:;",
+	"S1U,ST ISO,Floppy B / CD:;",
 	"S2U,VHDIMGHDF,IDE Master;",
 	"S3U,VHDIMGHDF,SCSI 0;",
 	"O12,Monitor,VGA,RGB,TV,Mono;",
@@ -78,9 +80,11 @@ localparam CONF_STR = {
 };
 
 /////////////////  RELOJES  ////////////////////////
-wire clk_sys;      // 32 MHz: CPU, chipset, DSP
-wire clk_mem;      // 96 MHz: SDRAM (SDRAM_CLK es este reloj invertido)
-wire clk_rd;       // 96 MHz retrasado: captura de las lecturas de la SDRAM
+wire clk_sys;      // 32,03 MHz: CPU, chipset, DSP
+wire clk_mem;      // 96,09 MHz: SDRAM (SDRAM_CLK es este reloj invertido)
+wire clk_rd;       // 96,09 MHz retrasado: captura de las lecturas de la SDRAM
+wire clk_pix;      // 25,205 MHz: pixel de los modos VGA (falcon_vga_resync),
+                   // 48/61 de clk_sys, del mismo VCO
 wire pll_locked;
 
 pll pll
@@ -89,16 +93,8 @@ pll pll
 	.c0(clk_sys),
 	.c1(clk_mem),
 	.c2(clk_rd),
+	.c3(clk_pix),
 	.locked(pll_locked)
-);
-
-// Reloj de pixel de los modos VGA (falcon_vga_resync)
-wire clk_pix;
-pll_vga pll_vga
-(
-	.inclk0(CLOCK_50),
-	.c0(clk_pix),
-	.locked()
 );
 
 // SDRAM_CLK es clk_mem invertido, sacado por un registro DDR del propio pin
@@ -292,6 +288,7 @@ wire signed [15:0] audio_l, audio_r;
 wire        fdd_led, hdd_led;
 
 wire  [6:0] img_mounted;
+wire [63:0] c_img_size;
 wire [31:0] sd_lba [7];
 wire  [6:0] sd_rd, sd_wr, sd_ack;
 wire  [5:0] sd_blk_cnt [7];
@@ -339,7 +336,7 @@ falcon_system #(.CLK_HZ(32000000)) system
 
 	.img_mounted(img_mounted),
 	.img_readonly(1'b0),
-	.img_size(img_size),
+	.img_size(c_img_size),
 	.sd_lba(sd_lba),
 	.sd_rd(sd_rd),
 	.sd_wr(sd_wr),
@@ -389,6 +386,7 @@ falcon_sd_bridge sd_bridge
 	.c_buff_wr(sd_buff_wr),
 	.c_buff_din(sd_buff_din),
 	.c_img_mounted(img_mounted),
+	.c_img_size(c_img_size),
 	.m_lba(m_lba),
 	.m_rd(m_rd),
 	.m_wr(m_wr),
@@ -397,7 +395,27 @@ falcon_sd_bridge sd_bridge
 	.m_dout(m_dout),
 	.m_dout_strobe(m_dout_strobe),
 	.m_din(m_din),
-	.m_img_mounted(m_img_mounted)
+	.m_img_mounted(m_img_mounted),
+	.m_img_size(img_size)
+);
+
+/////////////////  FPU  ///////////////////////////
+// Entre el core y la SDRAM: el buzon del 68882 ($E90000) lo atiende la FPU
+wire        S_BUSY, S_DOUT_READY, S_RD, S_WE;
+wire  [7:0] S_BURSTCNT, S_BE;
+wire [28:0] S_ADDR;
+wire [63:0] S_DOUT, S_DIN;
+
+falcon_fpu_mbox #(.CLK_HZ(32000000)) fpu_mbox
+(
+	.clk(clk_sys),
+	.reset(por),
+	.c_BUSY(DDRAM_BUSY), .c_BURSTCNT(DDRAM_BURSTCNT), .c_ADDR(DDRAM_ADDR),
+	.c_DOUT(DDRAM_DOUT), .c_DOUT_READY(DDRAM_DOUT_READY), .c_RD(DDRAM_RD),
+	.c_DIN(DDRAM_DIN), .c_BE(DDRAM_BE), .c_WE(DDRAM_WE),
+	.s_BUSY(S_BUSY), .s_BURSTCNT(S_BURSTCNT), .s_ADDR(S_ADDR),
+	.s_DOUT(S_DOUT), .s_DOUT_READY(S_DOUT_READY), .s_RD(S_RD),
+	.s_DIN(S_DIN), .s_BE(S_BE), .s_WE(S_WE)
 );
 
 /////////////////  SDRAM  /////////////////////////
@@ -408,15 +426,15 @@ falcon_sdram sdram
 	.clk_rd(clk_rd),
 	.init(~pll_locked),
 
-	.DDRAM_BUSY(DDRAM_BUSY),
-	.DDRAM_BURSTCNT(DDRAM_BURSTCNT),
-	.DDRAM_ADDR(DDRAM_ADDR),
-	.DDRAM_DOUT(DDRAM_DOUT),
-	.DDRAM_DOUT_READY(DDRAM_DOUT_READY),
-	.DDRAM_RD(DDRAM_RD),
-	.DDRAM_DIN(DDRAM_DIN),
-	.DDRAM_BE(DDRAM_BE),
-	.DDRAM_WE(DDRAM_WE),
+	.DDRAM_BUSY(S_BUSY),
+	.DDRAM_BURSTCNT(S_BURSTCNT),
+	.DDRAM_ADDR(S_ADDR),
+	.DDRAM_DOUT(S_DOUT),
+	.DDRAM_DOUT_READY(S_DOUT_READY),
+	.DDRAM_RD(S_RD),
+	.DDRAM_DIN(S_DIN),
+	.DDRAM_BE(S_BE),
+	.DDRAM_WE(S_WE),
 
 	.SDRAM_A(SDRAM_A),
 	.SDRAM_DQ(SDRAM_DQ),

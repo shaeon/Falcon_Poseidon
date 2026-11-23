@@ -8,3 +8,4 @@ poseidon/*.rpt
 poseidon/*.summary
 poseidon/*.smsg
 poseidon/rtl/
+poseidon/fpu_*.hex

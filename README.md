@@ -14,8 +14,9 @@ añade lo que sustituye al framework `sys/` de MiSTer.
 |-------|----------|
 | 68030, Videl, DSP56001, blitter, MFP, YM2149, IDE, SCSI, disquetera… | `Falcon_MiSTer/` (sin cambios) |
 | Memoria: la DDR3 de MiSTer sobre la SDRAM de 32 MB | `rtl/falcon_sdram.sv` |
-| Discos: las 7 ranuras de hps_io sobre las 4 de user_io | `rtl/falcon_sd_bridge.sv` |
-| Vídeo VGA con reloj de píxel uniforme (25,17 MHz) | `rtl/falcon_vga_resync.sv` |
+| Discos: las 7 ranuras de hps_io sobre las 4 de user_io, y las respuestas del SCSI que en MiSTer da el Main (READ TOC, MODE SENSE) | `rtl/falcon_sd_bridge.sv` |
+| FPU 68882 (en MiSTer la calcula el ARM) | `rtl/falcon_fpu_mbox.sv` + `rtl/fpu/` |
+| Vídeo VGA con reloj de píxel uniforme (25,2 MHz, relación exacta con el sistema) | `rtl/falcon_vga_resync.sv` |
 | OSD, teclado, ratón, joysticks, reloj, carga de ficheros | `rtl/falcon_mist_top.sv` + mist-modules |
 | Proyecto de Quartus 17.0 | `poseidon/` |
 
@@ -34,7 +35,7 @@ El sistema va a 32 MHz y la SDRAM a 96 MHz.
    | Entrada del OSD | Unidad del Falcon | Formatos |
    |-----------------|-------------------|----------|
    | Floppy A | A: | `.ST` |
-   | Floppy B | B: | `.ST` |
+   | Floppy B / CD | B: (hasta 3 MB) o CD-ROM SCSI ID 2 (más de 3 MB) | `.ST`, `.ISO` |
    | IDE Master | IDE 0 | `.VHD`, `.IMG`, `.HDF` |
    | SCSI 0 | SCSI ID 0 | `.VHD`, `.IMG`, `.HDF` |
 
@@ -49,25 +50,31 @@ El sistema va a 32 MHz y la SDRAM a 96 MHz.
 El Videl cuenta los puntos de los modos VGA a 25,175 MHz con un acumulador
 sobre los 32 MHz del sistema, así que cada punto dura 1 o 2 ciclos (31 o
 62 ns). En MiSTer el escalador lo arregla; aquí `falcon_vga_resync` mete la
-imagen en una FIFO y la saca con un reloj de píxel de verdad (25,1736 MHz, de
-un segundo PLL). La diferencia con 25,175 MHz se corrige saltándose o
-repitiendo un punto del borrado horizontal una vez cada unas 30 líneas. Los
-modos con base de 32 MHz (RGB, TV, mono) no lo necesitan y salen directos;
+imagen en una FIFO y la saca con un reloj de píxel de verdad. Ese reloj sale
+del mismo VCO que el del sistema (VCO/61 = 25,205 MHz frente a VCO/48 =
+32,03 MHz), y al compilar se cambia la relación del acumulador del Videl a
+48/61 (`common/build_id.tcl`). Así la FIFO nunca deriva: todas las líneas
+duran exactamente lo mismo y no hay que saltar ni repetir puntos (31,51 kHz,
+59,97 Hz). Los modos con base de 32 MHz (RGB, TV, mono) no lo necesitan y salen directos;
 el cambio entre los dos caminos es automático.
 
 ## Diferencias con la versión de MiSTer
 
-- **4 discos en vez de 7.** El firmware de MiST admite 4 imágenes. Se han
-  quedado Floppy A, Floppy B, IDE master y SCSI 0; no hay IDE slave, SCSI 1 ni
-  CD-ROM.
-- **Sin FPU 68882.** En MiSTer la calcula el ARM; aquí no hay dónde. El core se
-  compila con `FALCON_NO_FPU` y el 68030 toma la excepción de línea F, como un
-  Falcon sin coprocesador.
-- **El SCSI usa sus respuestas internas.** En MiSTer, INQUIRY, READ CAPACITY,
-  MODE SENSE y la tabla del CD los construye el Main modificado. Aquí
-  `falcon_sd_bridge` responde "sin respuesta" a esas consultas y el core usa las
-  suyas: INQUIRY y READ CAPACITY funcionan, y MODE SENSE contesta CHECK
-  CONDITION (lo mismo que en MiSTer con un Main sin modificar).
+- **4 imágenes en vez de 7.** El firmware de MiST admite 4 (`SD_IMAGES` en
+  `idxfile.h`). Se han quedado Floppy A, Floppy B o CD-ROM, IDE master y SCSI 0;
+  no hay IDE slave ni SCSI 1. La segunda entrada del OSD es el disquete B o el
+  CD-ROM según el tamaño de la imagen: hasta 3 MB es un `.ST`; más, un `.ISO`
+  (bloques de 2048 bytes) en el CD-ROM (SCSI ID 2), y la otra unidad se expulsa.
+- **FPU 68882 en la FPGA.** En MiSTer la calcula un programa del ARM a través de
+  un buzón en la DDR3; aquí `falcon_fpu_mbox` atiende ese buzón (que va por la
+  SDRAM) con la FPU de `rtl/fpu` (proyecto aparte, `fpu68882`). El core no se
+  modifica. Las operaciones básicas son exactas; las trascendentes, a 1–2 ulp.
+  Es más lenta que la de MiSTer en las trascendentes (unos 1.400 ciclos, ~45 µs).
+- **Respuestas del SCSI.** INQUIRY y READ CAPACITY las da el core. READ TOC (una
+  pista de datos y el lead-out) y MODE SENSE (cabecera y descriptor de bloque)
+  las da `falcon_sd_bridge`, que en MiSTer las pide al Main. No hay audio de CD
+  (PLAY AUDIO se acepta sin hacer nada) ni READ SUB-CHANNEL, y las imágenes
+  BIN/CUE no valen: solo `.ISO`.
 - **La NVRAM no se guarda.** Vuelve a los valores por defecto en cada arranque.
 - Sin puerto serie ni MIDI (la Poseidon no tiene pines para ellos).
 
@@ -101,16 +108,20 @@ deja el `.rbf` en la pestaña Actions; con una etiqueta `v*` crea una Release.
 iverilog -g2012 -o tb_sdram tb/tb_sdram.sv rtl/falcon_sdram.sv && vvp tb_sdram
 iverilog -g2012 -o tb_sd tb/tb_sd_bridge.sv rtl/falcon_sd_bridge.sv && vvp tb_sd
 iverilog -g2012 -o tb_vga tb/tb_vga_resync.sv rtl/falcon_vga_resync.sv && vvp tb_vga
+cp rtl/fpu/*.hex . && iverilog -g2012 -Irtl/fpu -o tb_mbox tb/tb_fpu_mbox.sv rtl/falcon_fpu_mbox.sv rtl/fpu/fpu_*.sv && vvp tb_mbox
 ```
 
 - `tb_sdram`: 6.000 lecturas de 1 y 4 palabras y escrituras con byte enables
   al azar contra un modelo de SDRAM (comprueba tRCD, bancos abiertos y
   refrescos).
 - `tb_sd`: lecturas de varios bloques del SCSI, lecturas de ventana, escritura
-  del IDE y lectura de la disquetera contra un modelo de user_io.
+  del IDE, lectura de la disquetera, montaje del CD (expulsa B), READ TOC en
+  LBA y MSF, MODE SENSE y lecturas del CD contra un modelo de user_io.
+- `tb_mbox`: el buzón de la FPU como lo usa el puente (accesos de 16 bits):
+  firma, versión y latido, reset, FSAVE nulo e idle, FMOVE.X, FADD y FSIN.
 - `tb_vga`: 640x480 VGA con el acumulador del Videl, con 1 y 2 puntos por
-  píxel: todas las líneas salen con 800 puntos (±1 al corregir la deriva) y
-  sin perder ni repetir píxeles.
+  píxel y la relación de relojes 48/61: todas las líneas salen con 800 puntos
+  exactos, sin perder ni repetir píxeles.
 
 ## Créditos
 

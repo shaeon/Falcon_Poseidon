@@ -15,7 +15,6 @@ set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
 set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING ON
 set_global_assignment -name VERILOG_MACRO "POSEIDON=1"
 set_global_assignment -name VERILOG_MACRO "BIG_OSD=1"
-set_global_assignment -name VERILOG_MACRO "FALCON_NO_FPU=1"
 set_global_assignment -name QIP_FILE files.qip
 set_global_assignment -name QIP_FILE pll.qip
 set_global_assignment -name SDC_FILE falcon_poseidon.sdc

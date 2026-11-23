@@ -42,6 +42,45 @@ sin modificar). Placa: Poseidon, EP4CGX150DF27I7, Quartus 17.0.
   cores). Para no perder margen de hold, las lecturas se cogen en el pin con
   clk_rd (c2, 7200 ps) y pasan a clk_mem 3,2 ns despues.
 
+## FPU y CD-ROM (20261123)
+
+- FPU 68882 propia (proyecto aparte /fpu68882, copia en rtl/fpu): 13.455 LE
+  sola, 41,8 MHz; basicas exactas, trascendentes a 1-2 ulp.
+- rtl/falcon_fpu_mbox.sv: entre falcon_system y falcon_sdram atiende el buzon
+  del puente ($E90000, docs/FPU_ARM.md del core) como el programa del ARM.
+  Sin FALCON_NO_FPU. tb/tb_fpu_mbox.sv: firma, version, latido, reset, FSAVE
+  nulo/idle, FMOVE.X, FADD, FSIN.
+- CD-ROM: el firmware de MiST solo admite 4 imagenes (SD_IMAGES 4 en
+  idxfile.h), asi que no hay quinta unidad: la imagen 1 es Floppy B (<= 3 MB)
+  o el CD-ROM SCSI ID 2 (> 3 MB, .ISO), y la otra se expulsa. READ TOC y
+  MODE SENSE los responde falcon_sd_bridge (en MiSTer, el Main).
+  tb/tb_sd_bridge.sv amplia: montaje, TOC LBA/MSF, MODE SENSE, lectura.
+- La primera sintesis dio 145.677 LE: la memoria del buzon se hizo con
+  registros. Ahora va en 8 carriles de 8 bits (M9K).
+
+## Prueba en placa 2 (Ron, 20261123): la imagen VGA tiembla; en baja se pierde
+
+- Causa: clk_pix era 25,1736 MHz (55 ppm por debajo del Videl) y la FIFO
+  corregia saltando o repitiendo un punto cada ~30 lineas, tambien en la zona
+  visible: lineas de longitud distinta. En baja (2 puntos por pixel) el salto
+  es de 2 puntos y el monitor pierde el enganche.
+- Arreglo (como en el FP-1100 y el NewBrain: relojes de relacion exacta
+  sacados del mismo VCO): el PLL principal ya iba a VCO 1537,5 MHz (50x123/4;
+  32/96 exactos no salen con PFD >= 5 MHz), clk_sys = VCO/48 = 32,03 MHz.
+  clk_pix = VCO/61 = 25,205 MHz (salida c3) y el acumulador del Videl se
+  parchea a 48/61 en common/build_id.tcl (genera poseidon/rtl/falcon/
+  falcon_videl.sv a partir del submodulo). VGA a 31,51 kHz / 59,97 Hz.
+  Sin correcciones: tb_vga_resync da 800 puntos en todas las lineas.
+- Probado y descartado: dos PLL en cascada para 1007/1280 exacto (Quartus no
+  consigue el x53 y lo aproxima a 48/29).
+- Compilacion con FPU + CD + clk_pix nuevo (fp9, semilla 2): 124.646 LE
+  (83 %); releases/Falcon_poseidon_20261123b.rbf. clk_sys -0,251 ns solo en
+  el modelo lento de 85 C (2 rutas: RAM externa del DSP -> cpubus d_i), con
+  +2,38 ns a 0 C; el resto de relojes cumple. Pendiente: otra semilla para
+  dejarlo limpio.
+- Compilacion con FPU + CD + reloj anterior (fp8): 125.201 LE (84 %),
+  tiempos cumplidos en todos los relojes.
+
 ## Comprobado
 
 - [x] Compilacion 20261123 (video VGA nuevo, SDRAM_CLK invertido, clk_rd
@@ -81,6 +120,10 @@ sin modificar). Placa: Poseidon, EP4CGX150DF27I7, Quartus 17.0.
       (o RD_LAT en falcon_sdram)
 - [ ] FPU 68882 en la FPGA (en MiSTer la calcula el ARM): el puente ya
       existe, faltaria la unidad aritmetica de 80 bits; hay sitio (~50k LE)
+- [ ] Probar en la placa: deteccion de la FPU (EmuTOS/TOS: _FPU), FPUTEST.TOS
+      del core (tools/fputest), CD con un driver SCSI (ExtenDOS, SPIN!)
+- [ ] Quinta imagen real: cambiar SD_IMAGES en el firmware (mist-firmware /
+      calypso-firmware) y user_io.v
 - [ ] Mejoras posibles: guardar la NVRAM (data_io tiene subida), más discos si
       el firmware lo permite
 

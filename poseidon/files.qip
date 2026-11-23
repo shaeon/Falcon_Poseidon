@@ -21,7 +21,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../Falcon_MiSTer/rtl/falcon/falco
 set_global_assignment -name SYSTEMVERILOG_FILE ../Falcon_MiSTer/rtl/falcon/falcon_mbox_test.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../Falcon_MiSTer/rtl/falcon/falcon_fpu_bridge.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../Falcon_MiSTer/rtl/falcon/falcon_combel.sv
-set_global_assignment -name SYSTEMVERILOG_FILE ../Falcon_MiSTer/rtl/falcon/falcon_videl.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/falcon/falcon_videl.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../Falcon_MiSTer/rtl/falcon/falcon_psg.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../Falcon_MiSTer/rtl/falcon/falcon_mfp.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../Falcon_MiSTer/rtl/falcon/falcon_mfp_timer.sv
@@ -54,4 +54,9 @@ set_global_assignment -name VERILOG_FILE ../common/mist-modules/i2s.v
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/falcon_sdram.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/falcon_sd_bridge.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/falcon_vga_resync.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/falcon_fpu_mbox.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/fpu/fpu_engine.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/fpu/fpu_seq.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/fpu/fpu_top.sv
+set_global_assignment -name SEARCH_PATH ../rtl/fpu
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/falcon_mist_top.sv

@@ -1,18 +1,18 @@
 // Banco de pruebas de falcon_vga_resync: un Videl de mentira da 640x480 VGA
 // (800 x 525 puntos) con el acumulador de 25,175 MHz sobre 32 MHz, con 1 y 2
-// puntos por pixel; se comprueba que a la salida cada linea dura lo mismo
-// (+-1 punto) y que la parte visible no pierde ni repite pixeles.
+// puntos por pixel; se comprueba que a la salida todas las lineas duran
+// exactamente 800 puntos y que la parte visible no pierde ni repite pixeles.
 `timescale 1ps/1ps
 module tb;
-reg clk = 0; always #15625 clk = ~clk;                 // 32 MHz
-reg clk_pix = 0; always #19861.7 clk_pix = ~clk_pix;   // 25,1736 MHz
+reg clk = 0; always #15600 clk = ~clk;                 // ~32 MHz (48 x 325 ps)
+reg clk_pix = 0; always #19825 clk_pix = ~clk_pix;     // 61 x 325 ps: 48/61 de clk, como en la placa
 integer DOTS = 1;                                       // puntos por pixel
 reg [31:0] facc = 0; reg ce_base = 0; reg [1:0] ph = 0; reg ce = 0;
 integer hpos = 0, vpos = 0;
 reg [5:0] r_in = 0; reg hs_in = 1, vs_in = 1, hb_in = 1, vb_in = 1;
 always @(posedge clk) begin
-	if (facc + 25175000 >= 32000000) begin facc <= facc + 25175000 - 32000000; ce_base <= 1; end
-	else begin facc <= facc + 25175000; ce_base <= 0; end
+	if (facc + 48 >= 61) begin facc <= facc + 48 - 61; ce_base <= 1; end
+	else begin facc <= facc + 48; ce_base <= 0; end
 	ce <= 0;
 	if (ce_base) begin
 		ph = (ph + 1) % DOTS;
