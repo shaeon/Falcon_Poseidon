@@ -15,6 +15,7 @@ añade lo que sustituye al framework `sys/` de MiSTer.
 | 68030, Videl, DSP56001, blitter, MFP, YM2149, IDE, SCSI, disquetera… | `Falcon_MiSTer/` (sin cambios) |
 | Memoria: la DDR3 de MiSTer sobre la SDRAM de 32 MB | `rtl/falcon_sdram.sv` |
 | Discos: las 7 ranuras de hps_io sobre las 4 de user_io | `rtl/falcon_sd_bridge.sv` |
+| Vídeo VGA con reloj de píxel uniforme (25,17 MHz) | `rtl/falcon_vga_resync.sv` |
 | OSD, teclado, ratón, joysticks, reloj, carga de ficheros | `rtl/falcon_mist_top.sv` + mist-modules |
 | Proyecto de Quartus 17.0 | `poseidon/` |
 
@@ -40,7 +41,19 @@ El sistema va a 32 MHz y la SDRAM a 96 MHz.
 4. Monitor: la opción "Monitor" (VGA, RGB, TV, mono) es lo que ve el TOS en
    `$FF8006`. En VGA y mono la imagen sale tal cual (31 kHz o más); en RGB y TV
    (15 kHz) pasa por el scandoubler, salvo que esté desactivado en el
-   firmware.
+   firmware. Sin TOS cargada sale una imagen negra con el OSD, para poder
+   cargarla.
+
+### Vídeo VGA
+
+El Videl cuenta los puntos de los modos VGA a 25,175 MHz con un acumulador
+sobre los 32 MHz del sistema, así que cada punto dura 1 o 2 ciclos (31 o
+62 ns). En MiSTer el escalador lo arregla; aquí `falcon_vga_resync` mete la
+imagen en una FIFO y la saca con un reloj de píxel de verdad (25,1736 MHz, de
+un segundo PLL). La diferencia con 25,175 MHz se corrige saltándose o
+repitiendo un punto del borrado horizontal una vez cada unas 30 líneas. Los
+modos con base de 32 MHz (RGB, TV, mono) no lo necesitan y salen directos;
+el cambio entre los dos caminos es automático.
 
 ## Diferencias con la versión de MiSTer
 
@@ -87,6 +100,7 @@ deja el `.rbf` en la pestaña Actions; con una etiqueta `v*` crea una Release.
 ```
 iverilog -g2012 -o tb_sdram tb/tb_sdram.sv rtl/falcon_sdram.sv && vvp tb_sdram
 iverilog -g2012 -o tb_sd tb/tb_sd_bridge.sv rtl/falcon_sd_bridge.sv && vvp tb_sd
+iverilog -g2012 -o tb_vga tb/tb_vga_resync.sv rtl/falcon_vga_resync.sv && vvp tb_vga
 ```
 
 - `tb_sdram`: 6.000 lecturas de 1 y 4 palabras y escrituras con byte enables
@@ -94,6 +108,9 @@ iverilog -g2012 -o tb_sd tb/tb_sd_bridge.sv rtl/falcon_sd_bridge.sv && vvp tb_sd
   refrescos).
 - `tb_sd`: lecturas de varios bloques del SCSI, lecturas de ventana, escritura
   del IDE y lectura de la disquetera contra un modelo de user_io.
+- `tb_vga`: 640x480 VGA con el acumulador del Videl, con 1 y 2 puntos por
+  píxel: todas las líneas salen con 800 puntos (±1 al corregir la deriva) y
+  sin perder ni repetir píxeles.
 
 ## Créditos
 

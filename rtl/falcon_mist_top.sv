@@ -79,8 +79,8 @@ localparam CONF_STR = {
 
 /////////////////  RELOJES  ////////////////////////
 wire clk_sys;      // 32 MHz: CPU, chipset, DSP
-wire clk_mem;      // 96 MHz: SDRAM
-wire clk_sdr;      // 96 MHz desfasado: pata SDRAM_CLK
+wire clk_mem;      // 96 MHz: SDRAM (SDRAM_CLK es este reloj invertido)
+wire clk_rd;       // 96 MHz retrasado: captura de las lecturas de la SDRAM
 wire pll_locked;
 
 pll pll
@@ -88,12 +88,23 @@ pll pll
 	.inclk0(CLOCK_50),
 	.c0(clk_sys),
 	.c1(clk_mem),
-	.c2(clk_sdr),
+	.c2(clk_rd),
 	.locked(pll_locked)
 );
 
-// SDRAM_CLK sale por un registro DDR del propio pin, como las ordenes y
-// los datos, para que los retardos vayan emparejados. La fase la da c2.
+// Reloj de pixel de los modos VGA (falcon_vga_resync)
+wire clk_pix;
+pll_vga pll_vga
+(
+	.inclk0(CLOCK_50),
+	.c0(clk_pix),
+	.locked()
+);
+
+// SDRAM_CLK es clk_mem invertido, sacado por un registro DDR del propio pin
+// (el nivel alto del reloj pone un 0 en la pata y el bajo un 1): sale por el
+// mismo tipo de registro que las ordenes y los datos, con los retardos
+// emparejados, y la SDRAM las ve a mitad de ciclo.
 altddio_out #(
 	.extend_oe_disable("OFF"),
 	.intended_device_family("Cyclone IV GX"),
@@ -104,9 +115,9 @@ altddio_out #(
 	.power_up_high("OFF"),
 	.width(1)
 ) sdramclk_ddr (
-	.datain_h(1'b1),
-	.datain_l(1'b0),
-	.outclock(clk_sdr),
+	.datain_h(1'b0),
+	.datain_l(1'b1),
+	.outclock(clk_mem),
 	.dataout(SDRAM_CLK),
 	.aclr(1'b0),
 	.aset(1'b0),
@@ -394,6 +405,7 @@ falcon_sdram sdram
 (
 	.clk(clk_sys),
 	.clk_mem(clk_mem),
+	.clk_rd(clk_rd),
 	.init(~pll_locked),
 
 	.DDRAM_BUSY(DDRAM_BUSY),
@@ -419,11 +431,43 @@ falcon_sdram sdram
 );
 
 /////////////////  VIDEO  /////////////////////////
+// Mientras la maquina esta en reset (sin TOS cargada, o cargandola) el
+// Videl no da sincronismos, y en MiST el OSD se pinta sobre el video del
+// core: sin sincronismos no hay OSD y no se puede cargar la TOS. En MiSTer
+// no pasa porque el OSD lo pinta el escalador. Mientras tanto sale una
+// imagen negra de 31,25 kHz / 59,5 Hz (32 MHz / 1024 / 525) con su OSD.
+reg  [9:0] fb_h = 10'd0, fb_v = 10'd0;
+reg        fb_hs = 1'b1, fb_vs = 1'b1, fb_hb = 1'b1, fb_vb = 1'b1;
+always @(posedge clk_sys) begin
+	fb_h <= fb_h + 10'd1;
+	if (&fb_h) fb_v <= (fb_v == 10'd524) ? 10'd0 : fb_v + 10'd1;
+	fb_hb <= (fb_h >= 10'd800);
+	fb_hs <= ~(fb_h >= 10'd832 && fb_h < 10'd928);
+	fb_vb <= (fb_v >= 10'd480);
+	fb_vs <= ~(fb_v >= 10'd490 && fb_v < 10'd492);
+end
+
+reg fb = 1'b1;
+always @(posedge clk_sys) fb <= reset;
+
+wire [5:0] v_r  = fb ? 6'd0 : r[7:2];
+wire [5:0] v_g  = fb ? 6'd0 : g[7:2];
+wire [5:0] v_b  = fb ? 6'd0 : b[7:2];
+wire       v_hs = fb ? fb_hs : hs;
+wire       v_vs = fb ? fb_vs : vs;
+wire       v_hb = fb ? fb_hb : hblank;
+wire       v_vb = fb ? fb_vb : vblank;
+
 // En VGA y monocromo el Videl ya da 31 kHz o mas (SM124: 71 Hz): va sin
 // scandoubler y con H y V separadas. En RGB y TV (15 kHz) el scandoubler
 // sigue la opcion del firmware.
-wire native_hi = (monitor == 2'b10) || (monitor == 2'b00);
+wire native_hi = (monitor == 2'b10) || (monitor == 2'b00) || fb;
 wire sd_off    = scandoubler_disable | native_hi;
+
+// Camino directo (clk_sys): modos con base de 32 MHz (RGB, TV, mono) y la
+// imagen de respaldo
+wire [5:0] d_r, d_g, d_b;
+wire       d_hs, d_vs;
 
 mist_video #(
 	.COLOR_DEPTH(6),
@@ -436,11 +480,11 @@ mist_video #(
 	.SPI_SCK(SPI_SCK),
 	.SPI_SS3(SPI_SS3),
 	.SPI_DI(SPI_DI),
-	.R(r[7:2]), .G(g[7:2]), .B(b[7:2]),
-	.HBlank(hblank), .VBlank(vblank),
-	.HSync(hs), .VSync(vs),
-	.VGA_R(VGA_R), .VGA_G(VGA_G), .VGA_B(VGA_B),
-	.VGA_VS(VGA_VS), .VGA_HS(VGA_HS),
+	.R(v_r), .G(v_g), .B(v_b),
+	.HBlank(v_hb), .VBlank(v_vb),
+	.HSync(v_hs), .VSync(v_vs),
+	.VGA_R(d_r), .VGA_G(d_g), .VGA_B(d_b),
+	.VGA_VS(d_vs), .VGA_HS(d_hs),
 	.ce_divider(3'd1),
 	.scandoubler_disable(sd_off),
 	.no_csync(no_csync | native_hi),
@@ -449,6 +493,60 @@ mist_video #(
 	.rotate(2'b00),
 	.blend(1'b0)
 );
+
+// Camino VGA (clk_pix): los modos con base de 25,175 MHz pasan por una FIFO
+// y salen con un reloj de pixel uniforme (ver falcon_vga_resync)
+wire       use25;
+wire [5:0] p_r, p_g, p_b;
+wire       p_hs, p_vs, p_hb, p_vb;
+
+falcon_vga_resync vga_resync
+(
+	.clk(clk_sys),
+	.reset(fb),
+	.ce_pix(ce_pix),
+	.r_in(r[7:2]), .g_in(g[7:2]), .b_in(b[7:2]),
+	.hs_in(hs), .vs_in(vs), .hb_in(hblank), .vb_in(vblank),
+	.use25(use25),
+	.clk_pix(clk_pix),
+	.r(p_r), .g(p_g), .b(p_b),
+	.hs(p_hs), .vs(p_vs), .hb(p_hb), .vb(p_vb)
+);
+
+wire [5:0] v25_r, v25_g, v25_b;
+wire       v25_hs, v25_vs;
+
+mist_video #(
+	.COLOR_DEPTH(6),
+	.SD_HCNT_WIDTH(11),
+	.USE_BLANKS(1'b1),
+	.OUT_COLOR_DEPTH(6),
+	.BIG_OSD(BIG_OSD)
+) mist_video_vga (
+	.clk_sys(clk_pix),
+	.SPI_SCK(SPI_SCK),
+	.SPI_SS3(SPI_SS3),
+	.SPI_DI(SPI_DI),
+	.R(p_r), .G(p_g), .B(p_b),
+	.HBlank(p_hb), .VBlank(p_vb),
+	.HSync(p_hs), .VSync(p_vs),
+	.VGA_R(v25_r), .VGA_G(v25_g), .VGA_B(v25_b),
+	.VGA_VS(v25_vs), .VGA_HS(v25_hs),
+	.ce_divider(3'd1),
+	.scandoubler_disable(1'b1),
+	.no_csync(1'b1),
+	.scanlines(2'b00),
+	.ypbpr(1'b0),
+	.rotate(2'b00),
+	.blend(1'b0)
+);
+
+// a las patas: los dos caminos ya salen de registros; el cambio es estatico
+assign VGA_R  = use25 ? v25_r  : d_r;
+assign VGA_G  = use25 ? v25_g  : d_g;
+assign VGA_B  = use25 ? v25_b  : d_b;
+assign VGA_HS = use25 ? v25_hs : d_hs;
+assign VGA_VS = use25 ? v25_vs : d_vs;
 
 /////////////////  AUDIO  /////////////////////////
 i2s i2s (

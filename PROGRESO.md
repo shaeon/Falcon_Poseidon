@@ -21,7 +21,40 @@ sin modificar). Placa: Poseidon, EP4CGX150DF27I7, Quartus 17.0.
 - Sin CD-ROM (necesita el Main modificado de MiSTer).
 - TOS: `FALCON.ROM` en la SD (índice 0, se carga al arrancar) o "Load TOS".
 
+## Prueba en placa 1 (Ron, 20261122)
+
+- Pantalla negra al principio: era la ROM (con una TOS buena arranca hasta
+  el escritorio, con disquetes y disco duro).
+- Aun asi se cambia: el Falcon tiene el Videl en reset hasta que hay TOS
+  (~rom_loaded) y en reset no da sincronismos; en MiST el OSD se pinta sobre
+  el video del core. Ahora sale una imagen negra de respaldo (31,25 kHz /
+  59,5 Hz) con OSD mientras la maquina esta en reset: sin TOS se puede
+  cargar desde el OSD.
+- Video VGA "un poco raro" (31,48 kHz / 59,94 Hz, columnas irregulares): el
+  Videl saca los 25,175 MHz con un acumulador sobre 32 MHz, cada punto dura
+  1 o 2 ciclos. Nuevo rtl/falcon_vga_resync.sv: FIFO escrita con ce_pix y
+  leida con un reloj de pixel de verdad (pll_vga, 25,1736 MHz), con
+  correccion de deriva en el borrado horizontal; salida por una segunda
+  instancia de mist_video. Cambio automatico midiendo ciclos por pixel.
+  tb/tb_vga_resync.sv: lineas de 800 puntos (+-1 al corregir), sin perder ni
+  repetir pixeles, con 1 y 2 puntos por pixel.
+- SDRAM_CLK pasa a clk_mem invertido (preferencia del usuario para todos los
+  cores). Para no perder margen de hold, las lecturas se cogen en el pin con
+  clk_rd (c2, 7200 ps) y pasan a clk_mem 3,2 ns despues.
+
 ## Comprobado
+
+- [x] Compilacion 20261123 (video VGA nuevo, SDRAM_CLK invertido, clk_rd
+      7200 ps, semilla 2, 0-85 C como el resto de proyectos de la Poseidon):
+      100.099 LE (67 %), 391 M9K (54 %), sin holguras negativas. clk_sys
+      +0,278 ns (85 C), hold peor +0,071 ns. SDRAM: lectura setup >= 1,6 /
+      hold >= 2,3 ns; ordenes setup >= 2,7 / hold >= 4,2 ns.
+      releases/Falcon_poseidon_20261123.rbf (Quartus 17.0.2).
+      Con la semilla 1 el reloj del sistema fallaba por 0,32 ns (100 C) en la
+      lectura de la RAM externa del DSP: el core va justo a 32 MHz en esta
+      FPGA; si una compilacion futura no cierra, probar otras semillas.
+
+### Historial
 
 - [x] Recursos: el core solo (sin sys/) en la EP4CGX150: 99.124 LE (66 %),
       372 M9K (52 %), 32 MHz con +0,78 ns de holgura (camino peor en la RAM
@@ -46,6 +79,8 @@ sin modificar). Placa: Poseidon, EP4CGX150DF27I7, Quartus 17.0.
       disquete, IDE, SCSI, teclado, ratón, vídeo en VGA/RGB
 - [ ] Si la SDRAM falla en la placa: ajustar la fase de c2 en poseidon/pll.v
       (o RD_LAT en falcon_sdram)
+- [ ] FPU 68882 en la FPGA (en MiSTer la calcula el ARM): el puente ya
+      existe, faltaria la unidad aritmetica de 80 bits; hay sitio (~50k LE)
 - [ ] Mejoras posibles: guardar la NVRAM (data_io tiene subida), más discos si
       el firmware lo permite
 

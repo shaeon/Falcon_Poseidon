@@ -8,7 +8,12 @@
 //
 // Dos relojes del mismo PLL, en fase:
 //   clk     32 MHz, el del sistema (lado DDRAM_*)
-//   clk_mem 96 MHz, la SDRAM (3 x clk)
+//   clk_mem 96 MHz, la SDRAM (3 x clk). SDRAM_CLK es clk_mem invertido
+//           (lo saca el top por un registro DDR del pin)
+//   clk_rd  96 MHz retrasado: solo coge el dato de lectura en el pin. Con el
+//           reloj invertido, a 96 MHz la ventana del dato cae ~2,6 ns antes
+//           del flanco de clk_mem: clk_rd (7,2 ns de retraso) la recoge y clk_mem
+//           la toma 3,2 ns despues (ver el .sdc)
 // Al ser multiplos exactos y en fase, los cruces son sincronos y TimeQuest
 // los analiza con 10,4 ns; todo lo que cruza sale de un registro.
 //
@@ -35,6 +40,7 @@ module falcon_sdram #(
 ) (
 	input  wire        clk,
 	input  wire        clk_mem,
+	input  wire        clk_rd,
 	input  wire        init,          // a 1 hasta que el PLL engancha
 
 	// lado DDR3 de MiSTer (clk)
@@ -141,9 +147,11 @@ reg        dq_oe = 1'b0;
 assign SDRAM_DQ = dq_oe ? dq_out : 16'bZ;
 
 // Registro de entrada sin logica delante: va al registro del propio pin
-// (FAST_INPUT_REGISTER en el .qsf)
+// (FAST_INPUT_REGISTER en el .qsf), con clk_rd; despues pasa a clk_mem
+reg [15:0] dq_rd;
+always @(posedge clk_rd) dq_rd <= SDRAM_DQ;
 reg [15:0] dq_in;
-always @(posedge clk_mem) dq_in <= SDRAM_DQ;
+always @(posedge clk_mem) dq_in <= dq_rd;
 
 localparam [2:0] S_INIT = 3'd0, S_IDLE = 3'd1, S_RD = 3'd2, S_WR = 3'd3, S_WAIT = 3'd4;
 reg  [2:0] st = S_INIT;

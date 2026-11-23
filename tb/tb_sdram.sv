@@ -7,6 +7,8 @@ module tb;
 reg clk = 0, clk_mem = 0;
 always #15.625 clk = ~clk;              // 32 MHz
 initial begin #0.001; forever #5.2083 clk_mem = ~clk_mem; end   // 96 MHz, en fase
+reg clk_rd = 0;                          // clk_mem retrasado 7,2 ns (3,2 antes del flanco siguiente)
+always @(clk_mem) clk_rd <= #7.2 clk_mem;
 reg init = 1;
 
 wire busy, dready; wire [63:0] dout;
@@ -14,7 +16,7 @@ reg rd = 0, we = 0; reg [7:0] bc = 1; reg [28:0] addr = 0; reg [63:0] din = 0; r
 wire [12:0] A; wire [15:0] DQ; wire dqml, dqmh, nwe, ncas, nras, ncs, cke; wire [1:0] BA;
 
 falcon_sdram #(.COL_BITS(9), .MEM_HZ(96_000_000)) dut (
-	.clk(clk), .clk_mem(clk_mem), .init(init),
+	.clk(clk), .clk_mem(clk_mem), .clk_rd(clk_rd), .init(init),
 	.DDRAM_BUSY(busy), .DDRAM_BURSTCNT(bc), .DDRAM_ADDR(addr), .DDRAM_DOUT(dout),
 	.DDRAM_DOUT_READY(dready), .DDRAM_RD(rd), .DDRAM_DIN(din), .DDRAM_BE(be), .DDRAM_WE(we),
 	.SDRAM_A(A), .SDRAM_DQ(DQ), .SDRAM_DQML(dqml), .SDRAM_DQMH(dqmh), .SDRAM_nWE(nwe),

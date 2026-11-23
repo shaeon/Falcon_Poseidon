@@ -6,6 +6,7 @@ create_timing_netlist -model slow
 read_sdc
 update_timing_netlist
 set f output_files/rutas_sdram.txt
+file delete -force $f
 foreach corner {slow fast} {
 	if {$corner == "fast"} {
 		delete_timing_netlist

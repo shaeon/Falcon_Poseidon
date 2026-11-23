@@ -53,4 +53,5 @@ set_global_assignment -name VERILOG_FILE ../common/mist-modules/i2s.v
 # propio del port
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/falcon_sdram.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/falcon_sd_bridge.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/falcon_vga_resync.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/falcon_mist_top.sv

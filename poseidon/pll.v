@@ -1,18 +1,8 @@
-// PLL de la Poseidon: 50 MHz -> 32 MHz (x16/25), las mismas dos salidas que
-// el de las otras placas, para que el top no tenga que saber de placas.
-//
-//   c0  32 MHz desfasado -7800 ps: reloj de la SDRAM (SDRAM_CLK)
-//   c1  32 MHz: reloj del sistema
-//
-// Si se regenera con el asistente ALTPLL, hay que conservar el orden
-// c0 = SDRAM, c1 = sistema, que es el que espera el .sdc.
+// PLL principal del Falcon030 para Poseidon (50 MHz de entrada):
+//   c0  32 MHz: clk_sys (CPU, chipset, DSP, user_io, video)
+//   c1  96 MHz: clk_mem, controlador de la SDRAM; SDRAM_CLK es c1 invertido
+//   c2  96 MHz retrasado 7200 ps: clk_rd, coge en el pin el dato leido
 `timescale 1 ps / 1 ps
-// synopsys translate_on
-// Poseidon: c0 (reloj de la SDRAM) va adelantado 12,5 ns y no 7,8 como en
-// las otras placas. Aqui SDRAM_CLK sale por rutado no dedicado y llega a la
-// SDRAM ~2,4 ns tarde; con 7,8 ns la ventana de lectura (del flanco de la
-// SDRAM que saca el dato al flanco del sistema que lo recoge, latencia CAS 2)
-// no cumplia tiempos por 3,7 ns. Ver doc/08-sdram.md
 module pll (
 	inclk0,
 	c0,
@@ -89,7 +79,7 @@ module pll (
 		altpll_component.clk2_divide_by = 25,
 		altpll_component.clk2_duty_cycle = 50,
 		altpll_component.clk2_multiply_by = 48,
-		altpll_component.clk2_phase_shift = "7700",
+		altpll_component.clk2_phase_shift = "7200",
 		altpll_component.compensate_clock = "CLK0",
 		altpll_component.inclk0_input_frequency = 20000,
 		altpll_component.intended_device_family = "Cyclone IV GX",
