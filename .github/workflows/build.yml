@@ -7,6 +7,8 @@
 # - Release: git tag v1.0 && git push origin v1.0
 #
 # Quartus se ejecuta con el usuario de la maquina de GitHub, no como root.
+# Las acciones van con Node.js 24 (checkout y upload-artifact v5; el resto se
+# fuerza con FORCE_JAVASCRIPT_ACTIONS_TO_NODE24).
 
 name: Build
 
@@ -47,7 +49,7 @@ jobs:
 
       # Falcon_MiSTer (con AP68030 dentro) y common/mist-modules son submodulos
       - name: Descargar el repositorio con los submodulos
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -79,7 +81,7 @@ jobs:
               echo '```'
               for s in "Setup Summary" "Hold Summary"; do
                 echo "== $s"
-                sed -n "/; Slow 1200mV 100C Model $s/,/^$/p" "$OUT.sta.rpt" | grep '^; [^C-]' | grep -v 'Clock *;' | cut -c1-110
+                sed -n "/; Slow 1200mV 85C Model $s/,/^$/p" "$OUT.sta.rpt" | grep '^; [^C-]' | grep -v 'Clock *;' | cut -c1-110
               done
               echo '```'
             fi
@@ -102,7 +104,7 @@ jobs:
 
       - name: Subir el resultado
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Falcon_poseidon-${{ github.sha }}
           path: dist/

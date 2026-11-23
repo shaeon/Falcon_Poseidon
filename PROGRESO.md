@@ -81,6 +81,14 @@ sin modificar). Placa: Poseidon, EP4CGX150DF27I7, Quartus 17.0.
 - Compilacion con FPU + CD + reloj anterior (fp8): 125.201 LE (84 %),
   tiempos cumplidos en todos los relojes.
 
+## Publicacion (20261123)
+
+- README.md en ingles y README_es.md en espanol; agradecimientos a RetroWiki
+  (Ron) y a actsl.com por los tokens; LICENSE GPL v2 (la de AP68030).
+- Workflow: checkout y upload-artifact v5 (Node.js 24), resto forzado con
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24; Quartus sin root; resumen con el modelo
+  de 85 C (el proyecto va a 0-85 C).
+
 ## Comprobado
 
 - [x] Compilacion 20261123 (video VGA nuevo, SDRAM_CLK invertido, clk_rd

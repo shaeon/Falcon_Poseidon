@@ -1,108 +1,111 @@
-# Falcon030 para Poseidon
+# Falcon030 for Poseidon
 
-Port del core **Atari Falcon030** de MiSTer
-([apolkosnik/Falcon_MiSTer](https://github.com/apolkosnik/Falcon_MiSTer), rama
-`ap030`, con el 68030 [AP68030](https://github.com/apolkosnik/AP68030)) a la
-placa **Poseidon** (Cyclone IV GX EP4CGX150), que funciona como un MiST.
+*[Versión en español](README_es.md)*
 
-El core de MiSTer va como submódulo y **no se modifica**: este repositorio solo
-añade lo que sustituye al framework `sys/` de MiSTer.
+Port of the MiSTer **Atari Falcon030** core
+([apolkosnik/Falcon_MiSTer](https://github.com/apolkosnik/Falcon_MiSTer), branch
+`ap030`, with the [AP68030](https://github.com/apolkosnik/AP68030) 68030) to the
+**Poseidon** board (Cyclone IV GX EP4CGX150), which works like a MiST.
 
-## Qué lleva
+The MiSTer core is a submodule and is **not modified**: this repository only
+adds what replaces the MiSTer `sys/` framework.
 
-| Parte | De dónde |
-|-------|----------|
-| 68030, Videl, DSP56001, blitter, MFP, YM2149, IDE, SCSI, disquetera… | `Falcon_MiSTer/` (sin cambios) |
-| Memoria: la DDR3 de MiSTer sobre la SDRAM de 32 MB | `rtl/falcon_sdram.sv` |
-| Discos: las 7 ranuras de hps_io sobre las 4 de user_io, y las respuestas del SCSI que en MiSTer da el Main (READ TOC, MODE SENSE) | `rtl/falcon_sd_bridge.sv` |
-| FPU 68882 (en MiSTer la calcula el ARM) | `rtl/falcon_fpu_mbox.sv` + `rtl/fpu/` |
-| Vídeo VGA con reloj de píxel uniforme (25,2 MHz, relación exacta con el sistema) | `rtl/falcon_vga_resync.sv` |
-| OSD, teclado, ratón, joysticks, reloj, carga de ficheros | `rtl/falcon_mist_top.sv` + mist-modules |
-| Proyecto de Quartus 17.0 | `poseidon/` |
+## Contents
 
-Ocupación (Quartus 17.0): unos 100.000 LE de 149.760 y la mitad de los M9K.
-El sistema va a 32 MHz y la SDRAM a 96 MHz.
+| Part | Where |
+|------|-------|
+| 68030, Videl, DSP56001, blitter, MFP, YM2149, IDE, SCSI, floppy… | `Falcon_MiSTer/` (unchanged) |
+| Memory: MiSTer's DDR3 mapped onto the 32 MB SDRAM | `rtl/falcon_sdram.sv` |
+| Disks: the 7 hps_io slots on the 4 user_io slots, plus the SCSI replies that the MiSTer Main gives (READ TOC, MODE SENSE) | `rtl/falcon_sd_bridge.sv` |
+| 68882 FPU (on MiSTer it is computed by the ARM) | `rtl/falcon_fpu_mbox.sv` + `rtl/fpu/` |
+| VGA video with an even pixel clock (25.2 MHz, exact ratio to the system clock) | `rtl/falcon_vga_resync.sv` |
+| OSD, keyboard, mouse, joysticks, RTC, file loading | `rtl/falcon_mist_top.sv` + mist-modules |
+| Quartus 17.0 project | `poseidon/` |
 
-## Uso
+Resources (Quartus 17.0): 124,646 LE of 149,760 (83 %) and 46 % of the memory
+bits. The system runs at 32.03 MHz, the SDRAM at 96.09 MHz (`SDRAM_CLK` is the
+controller clock inverted) and the VGA pixel clock at 25.205 MHz, all three
+from the same 1537.5 MHz VCO.
 
-1. Copia el `.rbf` a la SD.
-2. TOS: una imagen de 512 KB de TOS 4.0x o de EmuTOS en la raíz de la SD con el
-   nombre `FALCON.ROM` (se carga al arrancar el core), o cárgala desde el OSD
-   con "Load TOS". EmuTOS (`etos512*.img`) es libre y arranca desde IDE y SCSI
-   sin controlador.
-3. Discos desde el OSD:
+## Usage
 
-   | Entrada del OSD | Unidad del Falcon | Formatos |
-   |-----------------|-------------------|----------|
+1. Copy the `.rbf` to the SD card.
+2. TOS: a 512 KB TOS 4.0x or EmuTOS image in the root of the SD card named
+   `FALCON.ROM` (loaded when the core starts), or load it from the OSD with
+   "Load TOS". EmuTOS (`etos512*.img`) is free and boots from IDE and SCSI
+   without a driver.
+3. Disks from the OSD:
+
+   | OSD entry | Falcon drive | Formats |
+   |-----------|--------------|---------|
    | Floppy A | A: | `.ST` |
-   | Floppy B / CD | B: (hasta 3 MB) o CD-ROM SCSI ID 2 (más de 3 MB) | `.ST`, `.ISO` |
+   | Floppy B / CD | B: (up to 3 MB) or SCSI CD-ROM ID 2 (over 3 MB) | `.ST`, `.ISO` |
    | IDE Master | IDE 0 | `.VHD`, `.IMG`, `.HDF` |
    | SCSI 0 | SCSI ID 0 | `.VHD`, `.IMG`, `.HDF` |
 
-4. Monitor: la opción "Monitor" (VGA, RGB, TV, mono) es lo que ve el TOS en
-   `$FF8006`. En VGA y mono la imagen sale tal cual (31 kHz o más); en RGB y TV
-   (15 kHz) pasa por el scandoubler, salvo que esté desactivado en el
-   firmware. Sin TOS cargada sale una imagen negra con el OSD, para poder
-   cargarla.
+   The CD-ROM needs a TOS driver such as ExtenDOS or SPIN!.
 
-### Vídeo VGA
+4. Monitor: the "Monitor" option (VGA, RGB, TV, mono) is what TOS reads at
+   `$FF8006`. VGA and mono come out as they are (31 kHz or more); RGB and TV
+   (15 kHz) go through the scandoubler unless it is disabled in the firmware.
+   Without a TOS loaded the core shows a black screen with the OSD, so you can
+   load one.
 
-El Videl cuenta los puntos de los modos VGA a 25,175 MHz con un acumulador
-sobre los 32 MHz del sistema, así que cada punto dura 1 o 2 ciclos (31 o
-62 ns). En MiSTer el escalador lo arregla; aquí `falcon_vga_resync` mete la
-imagen en una FIFO y la saca con un reloj de píxel de verdad. Ese reloj sale
-del mismo VCO que el del sistema (VCO/61 = 25,205 MHz frente a VCO/48 =
-32,03 MHz), y al compilar se cambia la relación del acumulador del Videl a
-48/61 (`common/build_id.tcl`). Así la FIFO nunca deriva: todas las líneas
-duran exactamente lo mismo y no hay que saltar ni repetir puntos (31,51 kHz,
-59,97 Hz). Los modos con base de 32 MHz (RGB, TV, mono) no lo necesitan y salen directos;
-el cambio entre los dos caminos es automático.
+### VGA video
 
-## Diferencias con la versión de MiSTer
+The Videl counts VGA dots at 25.175 MHz with an accumulator on the 32 MHz
+system clock, so every dot lasts 1 or 2 cycles (31 or 62 ns). On MiSTer the
+scaler hides it; here `falcon_vga_resync` writes the picture into a FIFO and
+reads it with a real pixel clock. That clock comes from the same VCO as the
+system clock (VCO/61 = 25.205 MHz against VCO/48 = 32.03 MHz), and at build
+time the Videl accumulator ratio is changed to 48/61 (`common/build_id.tcl`).
+The FIFO never drifts: every line has exactly the same length and no dot is
+skipped or repeated (31.51 kHz, 59.97 Hz). Modes based on 32 MHz (RGB, TV,
+mono) don't need it and go out directly; switching between the two paths is
+automatic.
 
-- **4 imágenes en vez de 7.** El firmware de MiST admite 4 (`SD_IMAGES` en
-  `idxfile.h`). Se han quedado Floppy A, Floppy B o CD-ROM, IDE master y SCSI 0;
-  no hay IDE slave ni SCSI 1. La segunda entrada del OSD es el disquete B o el
-  CD-ROM según el tamaño de la imagen: hasta 3 MB es un `.ST`; más, un `.ISO`
-  (bloques de 2048 bytes) en el CD-ROM (SCSI ID 2), y la otra unidad se expulsa.
-- **FPU 68882 en la FPGA.** En MiSTer la calcula un programa del ARM a través de
-  un buzón en la DDR3; aquí `falcon_fpu_mbox` atiende ese buzón (que va por la
-  SDRAM) con la FPU de `rtl/fpu` (proyecto aparte, `fpu68882`). El core no se
-  modifica. Las operaciones básicas son exactas; las trascendentes, a 1–2 ulp.
-  Es más lenta que la de MiSTer en las trascendentes (unos 1.400 ciclos, ~45 µs).
-- **Respuestas del SCSI.** INQUIRY y READ CAPACITY las da el core. READ TOC (una
-  pista de datos y el lead-out) y MODE SENSE (cabecera y descriptor de bloque)
-  las da `falcon_sd_bridge`, que en MiSTer las pide al Main. No hay audio de CD
-  (PLAY AUDIO se acepta sin hacer nada) ni READ SUB-CHANNEL, y las imágenes
-  BIN/CUE no valen: solo `.ISO`.
-- **La NVRAM no se guarda.** Vuelve a los valores por defecto en cada arranque.
-- Sin puerto serie ni MIDI (la Poseidon no tiene pines para ellos).
+## Differences from the MiSTer version
 
-## Compilar
+- **4 images instead of 7.** The MiST firmware supports 4 (`SD_IMAGES` in
+  `idxfile.h`): Floppy A, Floppy B or CD-ROM, IDE master and SCSI 0; there is
+  no IDE slave or SCSI 1. The second OSD entry is floppy B or the CD-ROM
+  depending on the image size: up to 3 MB it is a `.ST`; larger, an `.ISO`
+  (2048-byte blocks) on the CD-ROM (SCSI ID 2), and the other drive is ejected.
+- **68882 FPU in the FPGA.** On MiSTer an ARM program computes it through a
+  mailbox in DDR3; here `falcon_fpu_mbox` serves that mailbox (which lives in
+  SDRAM) with the FPU in `rtl/fpu` (a separate project, `fpu68882`). The core
+  is not modified. Basic operations are exact; transcendentals are within
+  1–2 ulp and slower than on MiSTer (about 1,400 cycles, ~45 µs).
+- **SCSI replies.** INQUIRY and READ CAPACITY come from the core. READ TOC (one
+  data track plus lead-out) and MODE SENSE (header and block descriptor) come
+  from `falcon_sd_bridge`; on MiSTer the Main answers them. There is no CD
+  audio (PLAY AUDIO is accepted and ignored) and no READ SUB-CHANNEL, and
+  BIN/CUE images don't work: `.ISO` only.
+- **NVRAM is not saved.** It goes back to the defaults at every boot.
+- No serial port or MIDI (the Poseidon has no pins for them).
 
-Con Quartus Prime Lite 17.0:
+## Building
+
+With Quartus Prime Lite 17.0:
 
 ```
+git submodule update --init --recursive
 cd poseidon
 quartus_sh --flow compile falcon_poseidon
 ```
 
-o desde la interfaz, abriendo `poseidon/falcon_poseidon.qpf`. Hace falta
-descargar los submódulos antes:
+or open `poseidon/falcon_poseidon.qpf` in the GUI. The pre-flow script
+(`common/build_id.tcl`) writes `build_id.v`, copies the FPU ROMs and the `.mem`
+tables the core reads with `$readmemh`, and generates the patched
+`poseidon/rtl/falcon/falcon_videl.sv`.
 
-```
-git submodule update --init --recursive
-```
+GitHub Actions builds the core on every push (`.github/workflows/build.yml`,
+Quartus 17.0 in Docker, Node.js 24 actions, not as root) and leaves the `.rbf`
+in the Actions tab; a `v*` tag also creates a Release with the `.rbf`.
 
-El paso previo (`common/build_id.tcl`) genera `build_id.v` y copia a
-`poseidon/rtl/falcon/` las tablas `.mem` que el core lee con `$readmemh`.
+## Tests
 
-GitHub Actions compila el core en cada push (`.github/workflows/build.yml`) y
-deja el `.rbf` en la pestaña Actions; con una etiqueta `v*` crea una Release.
-
-## Pruebas
-
-`tb/` tiene bancos de pruebas para Icarus Verilog de los dos módulos propios:
+`tb/` has Icarus Verilog testbenches for the modules of this repository:
 
 ```
 iverilog -g2012 -o tb_sdram tb/tb_sdram.sv rtl/falcon_sdram.sv && vvp tb_sdram
@@ -111,22 +114,34 @@ iverilog -g2012 -o tb_vga tb/tb_vga_resync.sv rtl/falcon_vga_resync.sv && vvp tb
 cp rtl/fpu/*.hex . && iverilog -g2012 -Irtl/fpu -o tb_mbox tb/tb_fpu_mbox.sv rtl/falcon_fpu_mbox.sv rtl/fpu/fpu_*.sv && vvp tb_mbox
 ```
 
-- `tb_sdram`: 6.000 lecturas de 1 y 4 palabras y escrituras con byte enables
-  al azar contra un modelo de SDRAM (comprueba tRCD, bancos abiertos y
-  refrescos).
-- `tb_sd`: lecturas de varios bloques del SCSI, lecturas de ventana, escritura
-  del IDE, lectura de la disquetera, montaje del CD (expulsa B), READ TOC en
-  LBA y MSF, MODE SENSE y lecturas del CD contra un modelo de user_io.
-- `tb_mbox`: el buzón de la FPU como lo usa el puente (accesos de 16 bits):
-  firma, versión y latido, reset, FSAVE nulo e idle, FMOVE.X, FADD y FSIN.
-- `tb_vga`: 640x480 VGA con el acumulador del Videl, con 1 y 2 puntos por
-  píxel y la relación de relojes 48/61: todas las líneas salen con 800 puntos
-  exactos, sin perder ni repetir píxeles.
+- `tb_sdram`: 6,000 random 1- and 4-word reads and byte-enable writes against
+  an SDRAM model (checks tRCD, open banks and refresh).
+- `tb_sd`: multi-block SCSI reads, window reads, IDE writes, floppy reads, CD
+  mount (ejects B), READ TOC in LBA and MSF, MODE SENSE and CD reads against a
+  user_io model.
+- `tb_mbox`: the FPU mailbox as the bridge uses it (16-bit accesses):
+  signature, version and heartbeat, reset, null and idle FSAVE, FMOVE.X, FADD
+  and FSIN.
+- `tb_vga`: 640x480 VGA with the Videl accumulator, 1 and 2 dots per pixel and
+  the 48/61 clock ratio: every line is exactly 800 dots, no pixel lost or
+  repeated.
 
-## Créditos
+## Credits
 
-- Core Falcon030 y AP68030: apolkosnik.
-- mist-modules: MiST-devel, en la versión de teiram.
-- Port a Poseidon: Shaeon (Carlos Palmero).
+- Falcon030 core and AP68030: apolkosnik.
+- mist-modules: MiST-devel, teiram's version.
+- Poseidon port and 68882 FPU: Shaeon (Carlos Palmero).
+- Thanks to **RetroWiki** and its FPGA-dev team, especially Ron, who tested it
+  on his Poseidon.
+- Thanks to [actsl.com](https://www.actsl.com) for the Claude tokens used to
+  make this port.
 
-El port se ha hecho con ayuda de Claude (Anthropic).
+## Licence
+
+Each submodule keeps its own licence (AP68030: GPL v2). The code of this
+repository is released under the GPL v2 or later (`LICENSE`). Atari and
+Falcon030 are trademarks of their respective owners.
+
+---
+
+Developed with the help of Claude (Anthropic).
